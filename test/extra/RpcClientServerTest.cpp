@@ -16,6 +16,7 @@
 #include <up-cpp/datamodel/builder/Payload.h>
 #include <up-cpp/datamodel/builder/Uuid.h>
 #include <up-cpp/datamodel/serializer/Uuid.h>
+#include <up-cpp/datamodel/serializer/UUri.h>
 // #include <up-cpp/datamodel/validator/UMessage.h>
 // #include <up-cpp/datamodel/validator/UUri.h>
 // #include <google/protobuf/util/message_differencer.h>
@@ -35,6 +36,9 @@ using uprotocol::communication::RpcClient;
 using uprotocol::communication::RpcServer;
 
 constexpr std::string_view ZENOH_CONFIG_FILE = BUILD_REALPATH_ZENOH_CONF;
+
+constexpr std::string_view ENTITY_URI_STR = "//test0/10001/1/0";
+constexpr std::string_view TOPIC_URI_STR = "//test0/10001/1/8000";
 
 struct MyUUri {
 	std::string auth = "";
@@ -60,9 +64,13 @@ struct MyUUri {
 
 class RpcClientServerTest : public testing::Test {
 protected:
-	MyUUri rpc_service_uuri_{"me_authority", 65538, 1, 32600};
-	MyUUri client_ident_{"def_client_auth", 65538, 1, 0};
-	MyUUri server_ident_{"def_server_auth", 65538, 1, 0};
+	// MyUUri rpc_service_uuri_{"me_authority", 65538, 1, 32600};
+	// MyUUri client_ident_{"def_client_auth", 65538, 1, 0};
+	// MyUUri server_ident_{"def_server_auth", 65538, 1, 0};
+
+	MyUUri rpc_service_uuri_{"test0", 65537, 1, 32600};
+	MyUUri client_ident_{"test0", 65537, 1, 0};
+
 	using Transport = uprotocol::transport::ZenohUTransport;
 	std::shared_ptr<Transport> client_transport_;
 	// std::shared_ptr<Transport> server_transport_;
@@ -105,10 +113,19 @@ uprotocol::datamodel::builder::Payload fakePayload() {
 	    UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
 }
 
+UUri makeUUri(std::string_view serialized) {
+	return uprotocol::datamodel::serializer::uri::AsString::deserialize(
+	    static_cast<std::string>(serialized));
+}
+
+
 // TODO replace
 TEST_F(RpcClientServerTest, SomeTestName)
 {
 	using namespace std;
+
+	cout << makeUUri(TOPIC_URI_STR).ShortDebugString() << endl;
+	cout << makeUUri(ENTITY_URI_STR).ShortDebugString() << endl;
 
 	UMessage server_capture;
 
