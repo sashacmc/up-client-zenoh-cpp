@@ -65,7 +65,7 @@ protected:
 	MyUUri server_ident_{"def_server_auth", 65538, 1, 0};
 	using Transport = uprotocol::transport::ZenohUTransport;
 	std::shared_ptr<Transport> client_transport_;
-	std::shared_ptr<Transport> server_transport_;
+	// std::shared_ptr<Transport> server_transport_;
 
 	// Run once per TEST_F.
 	// Used to set up clean environments per test.
@@ -73,14 +73,14 @@ protected:
 	{
 		client_transport_ = std::make_shared<Transport>(client_ident_, ZENOH_CONFIG_FILE);
 		EXPECT_NE(nullptr, client_transport_);
-		server_transport_ = std::make_shared<Transport>(server_ident_, ZENOH_CONFIG_FILE);
-		EXPECT_NE(nullptr, server_transport_);
+		// server_transport_ = std::make_shared<Transport>(server_ident_, ZENOH_CONFIG_FILE);
+		// EXPECT_NE(nullptr, server_transport_);
 	}
 
 	void TearDown() override
 	{
 		client_transport_ = nullptr;
-		server_transport_ = nullptr;		
+		// server_transport_ = nullptr;		
 	}
 
 	// Run once per execution of the test application.
@@ -113,7 +113,7 @@ TEST_F(RpcClientServerTest, SomeTestName)
 	UMessage server_capture;
 
 	auto serverOrStatus = RpcServer::create(
-		server_transport_,
+		client_transport_,
 		rpc_service_uuri_,
 		[this, &server_capture](const UMessage& message) {
 			cout << "in server callback" << endl;
