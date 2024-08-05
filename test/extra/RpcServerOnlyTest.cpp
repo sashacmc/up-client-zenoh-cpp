@@ -62,7 +62,7 @@ struct MyUUri {
 	}
 };
 
-class RpcClientServerTest : public testing::Test {
+class RpcServerOnlyTest : public testing::Test {
 protected:
 	MyUUri rpc_service_uuri_{"me_authority", 65538, 1, 32600};
 	MyUUri client_ident_{"def_client_auth", 65538, 1, 0};
@@ -80,22 +80,19 @@ protected:
 	// Used to set up clean environments per test.
 	void SetUp() override
 	{
-		client_transport_ = std::make_shared<Transport>(client_ident_, ZENOH_CONFIG_FILE);
-		EXPECT_NE(nullptr, client_transport_);
 		server_transport_ = std::make_shared<Transport>(server_ident_, ZENOH_CONFIG_FILE);
 		EXPECT_NE(nullptr, server_transport_);
 	}
 
 	void TearDown() override
 	{
-		client_transport_ = nullptr;
 		server_transport_ = nullptr;		
 	}
 
 	// Run once per execution of the test application.
 	// Used for setup of all tests. Has access to this instance.
-	RpcClientServerTest() = default;
-	~RpcClientServerTest() = default;
+	RpcServerOnlyTest() = default;
+	~RpcServerOnlyTest() = default;
 
 	// Run once per execution of the test application.
 	// Used only for global setup outside of tests.
@@ -121,7 +118,7 @@ UUri makeUUri(std::string_view serialized) {
 
 
 // TODO replace
-TEST_F(RpcClientServerTest, SomeTestName)
+TEST_F(RpcServerOnlyTest, SomeTestName)
 {
 	using namespace std;
 
@@ -144,28 +141,7 @@ TEST_F(RpcClientServerTest, SomeTestName)
 	ASSERT_TRUE(serverOrStatus.has_value());
 	ASSERT_NE(serverOrStatus.value(), nullptr);
 
-	auto payload = fakePayload();
-	auto payload_content = payload.buildCopy();
-
-	auto client = RpcClient(client_transport_, rpc_service_uuri_, UPriority::UPRIORITY_CS4, 1000ms);
-
-	bool callback_called = false;
-	uprotocol::v1::UMessage received_response;
-	uprotocol::communication::RpcClient::InvokeHandle client_handle;
-	EXPECT_NO_THROW(client_handle = client.invokeMethod(
-		std::move(payload),
-		[this, &callback_called, &received_response](auto maybe_response) {
-			cout << "in client callback " << typeid(maybe_response).name() << endl;
-			if (maybe_response.has_value()) {
-				cout << maybe_response.value().ShortDebugString() << endl;
-			}
-			else {
-				cout << "does not have value " << maybe_response.error().ShortDebugString() << endl;
-			}
-		    callback_called = true;
-		    // EXPECT_TRUE(maybe_response);
-		    // received_response = std::move(maybe_response).value();
-		}));
+	sleep(20);
 }
 
 }  // namespace
