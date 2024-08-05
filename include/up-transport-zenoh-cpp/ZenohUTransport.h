@@ -22,27 +22,7 @@
 #define ZENOHCXX_ZENOHC
 #include <zenoh.hxx>
 
-namespace zenohc {
-
-class OwnedQuery {
-public:
-	OwnedQuery(const z_query_t& query) : _query(z_query_clone(&query)) {}
-
-	OwnedQuery(const OwnedQuery&) = delete;
-	OwnedQuery& operator=(const OwnedQuery&) = delete;
-
-	~OwnedQuery() { z_drop(&_query); }
-
-	Query loan() const { return z_loan(_query); }
-	bool check() const { return z_check(_query); }
-
-private:
-	z_owned_query_t _query;
-};
-
-using OwnedQueryPtr = std::shared_ptr<OwnedQuery>;
-
-}  // namespace zenohc
+#include "ThreadSafeMap.h"
 
 namespace uprotocol::transport {
 
@@ -126,11 +106,12 @@ private:
 	uattributesToAttachment(const v1::UAttributes& attributes);
 
 	static v1::UAttributes attachmentToUAttributes(
-	    const zenoh::AttachmentView& attachment);
+	    const zenoh::Bytes& attachment);
 
 	static zenoh::Priority mapZenohPriority(v1::UPriority upriority);
 
 	static v1::UMessage sampleToUMessage(const zenoh::Sample& sample);
+	static v1::UMessage queryToUMessage(const zenoh::Query& query);
 
 	v1::UStatus registerRequestListener_(const std::string& zenoh_key,
 	                                     CallableConn listener);
@@ -154,17 +135,13 @@ private:
 
 	zenoh::Session session_;
 
-	std::map<UuriKey, CallableConn> rpc_callback_map_;
-	std::mutex rpc_callback_map_mutex_;
+	ThreadSafeMap<UuriKey, CallableConn> rpc_callback_map_;
 
-	std::map<CallableConn, zenoh::Subscriber> subscriber_map_;
-	std::mutex subscriber_map_mutex_;
+	ThreadSafeMap<CallableConn, zenoh::Subscriber<void>> subscriber_map_;
 
-	std::map<CallableConn, zenoh::Queryable> queryable_map_;
-	std::mutex queryable_map_mutex_;
+	ThreadSafeMap<CallableConn, zenoh::Queryable<void>> queryable_map_;
 
-	std::map<std::string, zenoh::OwnedQueryPtr> query_map_;
-	std::mutex query_map_mutex_;
+	ThreadSafeMap<std::string, std::shared_ptr<zenoh::Query>> query_map_;
 };
 
 }  // namespace uprotocol::transport
