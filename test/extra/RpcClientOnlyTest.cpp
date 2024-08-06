@@ -62,7 +62,7 @@ struct MyUUri {
 	}
 };
 
-class RpcClientServerTest : public testing::Test {
+class RpcClientOnlyTest : public testing::Test {
 protected:
 	MyUUri rpc_service_uuri_{"me_authority", 65538, 1, 32600};
 	MyUUri client_ident_{"def_client_auth", 65538, 1, 0};
@@ -82,20 +82,17 @@ protected:
 	{
 		client_transport_ = std::make_shared<Transport>(client_ident_, ZENOH_CONFIG_FILE);
 		EXPECT_NE(nullptr, client_transport_);
-		server_transport_ = std::make_shared<Transport>(server_ident_, ZENOH_CONFIG_FILE);
-		EXPECT_NE(nullptr, server_transport_);
 	}
 
 	void TearDown() override
 	{
 		client_transport_ = nullptr;
-		server_transport_ = nullptr;		
 	}
 
 	// Run once per execution of the test application.
 	// Used for setup of all tests. Has access to this instance.
-	RpcClientServerTest() = default;
-	~RpcClientServerTest() = default;
+	RpcClientOnlyTest() = default;
+	~RpcClientOnlyTest() = default;
 
 	// Run once per execution of the test application.
 	// Used only for global setup outside of tests.
@@ -121,28 +118,12 @@ UUri makeUUri(std::string_view serialized) {
 
 
 // TODO replace
-TEST_F(RpcClientServerTest, SomeTestName)
+TEST_F(RpcClientOnlyTest, SomeTestName)
 {
 	using namespace std;
 
 	cout << makeUUri(TOPIC_URI_STR).ShortDebugString() << endl;
 	cout << makeUUri(ENTITY_URI_STR).ShortDebugString() << endl;
-
-	UMessage server_capture;
-
-	auto serverOrStatus = RpcServer::create(
-		server_transport_,
-		rpc_service_uuri_,
-		[this, &server_capture](const UMessage& message) {
-			cout << "in server callback" << endl;
-			UPayloadFormat format = UPayloadFormat::UPAYLOAD_FORMAT_TEXT;
-			std::string responseData = "RPC Response";
-			uprotocol::datamodel::builder::Payload payload(responseData, format);
-			return payload;
-		},
-		UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
-	ASSERT_TRUE(serverOrStatus.has_value());
-	ASSERT_NE(serverOrStatus.value(), nullptr);
 
 	auto payload = fakePayload();
 	auto payload_content = payload.buildCopy();
