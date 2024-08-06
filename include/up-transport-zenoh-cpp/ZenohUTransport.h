@@ -15,7 +15,14 @@
 #include <up-cpp/transport/UTransport.h>
 
 #include <filesystem>
+#include <mutex>
 #include <optional>
+#include <unordered_map>
+
+#define ZENOHCXX_ZENOHC
+#include <zenoh.hxx>
+
+#include "ThreadSafeMap.h"
 
 namespace uprotocol::transport {
 
@@ -61,6 +68,7 @@ protected:
 
 	/// @brief Represents the callable end of a callback connection.
 	using CallableConn = typename UTransport::CallableConn;
+	using UuriKey = std::string;
 
 	/// @brief Register listener to be called when UMessage is received
 	///        for the given URI.
@@ -69,20 +77,13 @@ protected:
 	///          version of registerListener() will reset the connection
 	///          handle before returning it to the caller.
 	///
-	/// @param sink_filter UUri for where messages are expected to arrive via
-	///                    the underlying transport technology. The callback
-	///                    will be called when a message with a matching sink
-	/// @param listener shared_ptr to a connected callback object, to be
-	///                 called when a message is received.
-	/// @param source_filter (Optional) UUri for where messages are expected to
-	///                      have been sent from. The callback will only be
-	///                      called for messages where the source matches.
+	/// @see up-cpp for additional details
 	///
 	/// @returns * OKSTATUS if the listener was registered successfully.
 	///          * FAILSTATUS with the appropriate failure otherwise.
 	[[nodiscard]] virtual v1::UStatus registerListenerImpl(
-	    const v1::UUri& sink_filter, CallableConn&& listener,
-	    std::optional<v1::UUri>&& source_filter) override;
+	    CallableConn&& listener, const v1::UUri& source_filter,
+	    std::optional<v1::UUri>&& sink_filter) override;
 
 	/// @brief Clean up on listener disconnect.
 	///
@@ -94,7 +95,53 @@ protected:
 	/// @param listener shared_ptr of the Connection that has been broken.
 	virtual void cleanupListener(CallableConn listener) override;
 
+	static std::string toZenohKeyString(
+	    const std::string& default_authority_name, const v1::UUri& source,
+	    const std::optional<v1::UUri>& sink);
+
 private:
+	static v1::UStatus uError(v1::UCode code, std::string_view message);
+
+	static std::vector<std::pair<std::string, std::string>>
+	uattributesToAttachment(const v1::UAttributes& attributes);
+
+	static v1::UAttributes attachmentToUAttributes(
+	    const zenoh::Bytes& attachment);
+
+	static zenoh::Priority mapZenohPriority(v1::UPriority upriority);
+
+	static v1::UMessage sampleToUMessage(const zenoh::Sample& sample);
+	static v1::UMessage queryToUMessage(const zenoh::Query& query);
+
+	v1::UStatus registerRequestListener_(const std::string& zenoh_key,
+	                                     CallableConn listener);
+
+	v1::UStatus registerResponseListener_(const std::string& zenoh_key,
+	                                      CallableConn listener);
+
+	v1::UStatus registerPublishNotificationListener_(
+	    const std::string& zenoh_key, CallableConn listener);
+
+	v1::UStatus sendRequest_(const std::string& zenoh_key,
+	                         const std::string& payload,
+	                         const v1::UAttributes& attributes);
+
+	v1::UStatus sendResponse_(const std::string& payload,
+	                          const v1::UAttributes& attributes);
+
+	v1::UStatus sendPublishNotification_(const std::string& zenoh_key,
+	                                     const std::string& payload,
+	                                     const v1::UAttributes& attributes);
+
+	zenoh::Session session_;
+
+	ThreadSafeMap<UuriKey, CallableConn> rpc_callback_map_;
+
+	ThreadSafeMap<CallableConn, zenoh::Subscriber<void>> subscriber_map_;
+
+	ThreadSafeMap<CallableConn, zenoh::Queryable<void>> queryable_map_;
+
+	ThreadSafeMap<std::string, std::shared_ptr<zenoh::Query>> query_map_;
 };
 
 }  // namespace uprotocol::transport
