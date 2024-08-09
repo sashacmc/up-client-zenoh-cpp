@@ -10,22 +10,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <gtest/gtest.h>
-
 #include <up-cpp/communication/RpcClient.h>
 #include <up-cpp/communication/RpcServer.h>
 #include <up-cpp/datamodel/builder/Payload.h>
 #include <up-cpp/datamodel/builder/Uuid.h>
-#include <up-cpp/datamodel/serializer/Uuid.h>
 #include <up-cpp/datamodel/serializer/UUri.h>
-// #include <up-cpp/datamodel/validator/UMessage.h>
-// #include <up-cpp/datamodel/validator/UUri.h>
-// #include <google/protobuf/util/message_differencer.h>
-
+#include <up-cpp/datamodel/serializer/Uuid.h>
 #include <up-transport-zenoh-cpp/ZenohUTransport.h>
 
 #include <iostream>
-
-// using MsgDiff = google::protobuf::util::MessageDifferencer;
 
 using namespace std::chrono_literals;
 
@@ -37,17 +30,13 @@ using uprotocol::communication::RpcServer;
 
 constexpr std::string_view ZENOH_CONFIG_FILE = BUILD_REALPATH_ZENOH_CONF;
 
-constexpr std::string_view ENTITY_URI_STR = "//test0/10001/1/0";
-constexpr std::string_view TOPIC_URI_STR = "//test0/10001/1/8000";
-
 struct MyUUri {
 	std::string auth = "";
 	uint32_t ue_id = 0x8000;
 	uint32_t ue_version_major = 1;
 	uint32_t resource_id = 1;
 
-	operator uprotocol::v1::UUri() const
-	{
+	operator uprotocol::v1::UUri() const {
 		UUri ret;
 		ret.set_authority_name(auth);
 		ret.set_ue_id(ue_id);
@@ -56,8 +45,7 @@ struct MyUUri {
 		return ret;
 	}
 
-	std::string to_string() const
-	{
+	std::string to_string() const {
 		return std::string("<< ") + UUri(*this).ShortDebugString() + " >>";
 	}
 };
@@ -65,32 +53,19 @@ struct MyUUri {
 class RpcClientServerTest : public testing::Test {
 protected:
 	MyUUri rpc_service_uuri_{"me_authority", 65538, 1, 32600};
-	MyUUri client_ident_{"def_client_auth", 65538, 1, 0};
-	MyUUri server_ident_{"def_server_auth", 65538, 1, 0};
-
-	// MyUUri rpc_service_uuri_{"test0", 65537, 1, 32600};
-	// MyUUri client_ident_{"test0", 65537, 1, 0};
-	// MyUUri server_ident_{"def_server_auth", 65538, 1, 0};
+	MyUUri ident_{"me_authority", 65538, 1, 0};
 
 	using Transport = uprotocol::transport::ZenohUTransport;
-	std::shared_ptr<Transport> client_transport_;
-	std::shared_ptr<Transport> server_transport_;
+	std::shared_ptr<Transport> transport_;
 
 	// Run once per TEST_F.
 	// Used to set up clean environments per test.
-	void SetUp() override
-	{
-		client_transport_ = std::make_shared<Transport>(client_ident_, ZENOH_CONFIG_FILE);
-		EXPECT_NE(nullptr, client_transport_);
-		server_transport_ = std::make_shared<Transport>(server_ident_, ZENOH_CONFIG_FILE);
-		EXPECT_NE(nullptr, server_transport_);
+	void SetUp() override {
+		transport_ = std::make_shared<Transport>(ident_, ZENOH_CONFIG_FILE);
+		EXPECT_NE(nullptr, transport_);
 	}
 
-	void TearDown() override
-	{
-		client_transport_ = nullptr;
-		server_transport_ = nullptr;		
-	}
+	void TearDown() override { transport_ = nullptr; }
 
 	// Run once per execution of the test application.
 	// Used for setup of all tests. Has access to this instance.
@@ -103,69 +78,51 @@ protected:
 	static void TearDownTestSuite() {}
 };
 
-uprotocol::datamodel::builder::Payload fakePayload() {
-	using namespace uprotocol::datamodel;
-
-	auto uuid = builder::UuidBuilder::getBuilder();
-	auto uuid_str = serializer::uuid::AsString::serialize(uuid.build());
-
-	return builder::Payload(
-	    std::move(uuid_str),
-	    UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
-}
-
-UUri makeUUri(std::string_view serialized) {
-	return uprotocol::datamodel::serializer::uri::AsString::deserialize(
-	    static_cast<std::string>(serialized));
-}
-
-
-// TODO replace
-TEST_F(RpcClientServerTest, SomeTestName)
-{
+TEST_F(RpcClientServerTest, SimpleRoundTrip) {
 	using namespace std;
 
-	cout << makeUUri(TOPIC_URI_STR).ShortDebugString() << endl;
-	cout << makeUUri(ENTITY_URI_STR).ShortDebugString() << endl;
+	string client_request{"RPC Request"};
+	uprotocol::datamodel::builder::Payload client_request_payload(
+	    client_request, UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
+	bool client_called = false;
+	UMessage client_capture;
 
+	bool server_called = false;
 	UMessage server_capture;
+	string server_response{"RPC Response"};
+	uprotocol::datamodel::builder::Payload server_response_payload(
+	    server_response, UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
 
 	auto serverOrStatus = RpcServer::create(
-		server_transport_,
-		rpc_service_uuri_,
-		[this, &server_capture](const UMessage& message) {
-			cout << "in server callback" << endl;
-			UPayloadFormat format = UPayloadFormat::UPAYLOAD_FORMAT_TEXT;
-			std::string responseData = "RPC Response";
-			uprotocol::datamodel::builder::Payload payload(responseData, format);
-			return payload;
-		},
-		UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
+	    transport_, rpc_service_uuri_,
+	    [this, &server_called, &server_capture,
+	     &server_response_payload](const UMessage& message) {
+		    server_called = true;
+		    server_capture = message;
+		    return server_response_payload;
+	    },
+	    UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
 	ASSERT_TRUE(serverOrStatus.has_value());
 	ASSERT_NE(serverOrStatus.value(), nullptr);
 
-	auto payload = fakePayload();
-	auto payload_content = payload.buildCopy();
+	auto client = RpcClient(transport_, rpc_service_uuri_,
+	                        UPriority::UPRIORITY_CS4, 1000ms);
 
-	auto client = RpcClient(client_transport_, rpc_service_uuri_, UPriority::UPRIORITY_CS4, 1000ms);
-
-	bool callback_called = false;
-	uprotocol::v1::UMessage received_response;
 	uprotocol::communication::RpcClient::InvokeHandle client_handle;
-	EXPECT_NO_THROW(client_handle = client.invokeMethod(
-		std::move(payload),
-		[this, &callback_called, &received_response](auto maybe_response) {
-			cout << "in client callback " << typeid(maybe_response).name() << endl;
-			if (maybe_response.has_value()) {
-				cout << maybe_response.value().ShortDebugString() << endl;
-			}
-			else {
-				cout << "does not have value " << maybe_response.error().ShortDebugString() << endl;
-			}
-		    callback_called = true;
-		    // EXPECT_TRUE(maybe_response);
-		    // received_response = std::move(maybe_response).value();
-		}));
+	EXPECT_NO_THROW(
+	    client_handle = client.invokeMethod(
+	        std::move(client_request_payload),
+	        [this, &client_called, &client_capture](auto maybe_response) {
+		        client_called = true;
+		        if (maybe_response.has_value()) {
+			        client_capture = maybe_response.value();
+		        }
+	        }));
+
+	EXPECT_TRUE(server_called);
+	EXPECT_EQ(client_request, server_capture.payload());
+	EXPECT_TRUE(client_called);
+	EXPECT_EQ(server_response, client_capture.payload());
 }
 
 }  // namespace
